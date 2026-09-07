@@ -54,7 +54,12 @@ fn find_fhs_file(filename: &str) -> Option<PathBuf> {
 
 /// "appimage" si el fichero es el perfil extendido, "base" en otro caso.
 fn profile_of(fhs: &Path) -> &'static str {
-    if fhs.file_name().and_then(|s| s.to_str()).unwrap_or("").contains("appimage") {
+    if fhs
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .contains("appimage")
+    {
         "appimage"
     } else {
         "base"
@@ -99,7 +104,9 @@ fn extract_and_run_fhs(fhs: &Path, target: &str, rest: &[String], force_rebuild:
     let cache_base = std::env::var("XDG_CACHE_HOME")
         .map(|h| format!("{h}/vx-cache"))
         .unwrap_or_else(|_| {
-            std::env::var("HOME").map(|h| format!("{h}/.cache/vx-cache")).unwrap_or_else(|_| "/tmp/vx-cache".into())
+            std::env::var("HOME")
+                .map(|h| format!("{h}/.cache/vx-cache"))
+                .unwrap_or_else(|_| "/tmp/vx-cache".into())
         });
     let stem = Path::new(target)
         .file_name()
@@ -231,10 +238,15 @@ fn cache_path(fhs: &Path) -> Option<PathBuf> {
     let base = std::env::var("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            std::env::var("HOME").map(|h| PathBuf::from(format!("{h}/.cache"))).unwrap_or_else(|_| PathBuf::from("/tmp"))
+            std::env::var("HOME")
+                .map(|h| PathBuf::from(format!("{h}/.cache")))
+                .unwrap_or_else(|_| PathBuf::from("/tmp"))
         });
     // Una cache por perfil: base y appimage son closures distintos.
-    Some(base.join("vx").join(format!("fhs-path-{}", profile_of(fhs))))
+    Some(
+        base.join("vx")
+            .join(format!("fhs-path-{}", profile_of(fhs))),
+    )
 }
 
 fn cache_lookup(fhs: &Path, force_rebuild: bool) -> Option<String> {
@@ -243,7 +255,12 @@ fn cache_lookup(fhs: &Path, force_rebuild: bool) -> Option<String> {
     }
     let meta = fs::metadata(fhs).ok()?;
     let len = meta.len();
-    let mtime = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    let mtime = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
     let cache = cache_path(fhs)?;
     let content = fs::read_to_string(&cache).ok()?;
     let mut parts = content.split_whitespace();
@@ -261,7 +278,11 @@ fn cache_lookup(fhs: &Path, force_rebuild: bool) -> Option<String> {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().is_empty())
         .unwrap_or(false);
-    if valid { Some(entry) } else { None }
+    if valid {
+        Some(entry)
+    } else {
+        None
+    }
 }
 
 fn cache_store(fhs: &Path, store: &str) {
@@ -299,7 +320,10 @@ fn build_fhs_entry(fhs: &Path, force_rebuild: bool) -> Option<String> {
     let fhs_str = fhs.to_str().unwrap_or("vx-fhs.nix");
     println!("[vxr] construyendo FHS (solo la primera vez o si cambio vx-fhs.nix)...");
     // Via moderna: mismo comando en channels y flakes
-    if let Some(out) = util::capture("nix", &["build", "-f", fhs_str, "--no-link", "--print-out-paths"]) {
+    if let Some(out) = util::capture(
+        "nix",
+        &["build", "-f", fhs_str, "--no-link", "--print-out-paths"],
+    ) {
         let store = out.lines().last().unwrap_or("").trim().to_string();
         if !store.is_empty() {
             let entry = format!("{store}/bin/vxr-fhs");
@@ -329,7 +353,13 @@ fn build_fhs_entry(fhs: &Path, force_rebuild: bool) -> Option<String> {
 /// si el runtime AppImage muere por FUSE (falta lib, montaje denegado en el
 /// namespace, kernel endurecido...), se reintenta automaticamente por
 /// extraccion (tesis §3.2), en vez de dejar al usuario con el error crudo.
-fn run_inside_fhs(fhs: &Path, target: &str, rest: &[String], with_nixgl: bool, force_rebuild: bool) -> i32 {
+fn run_inside_fhs(
+    fhs: &Path,
+    target: &str,
+    rest: &[String],
+    with_nixgl: bool,
+    force_rebuild: bool,
+) -> i32 {
     let resolved = resolve_target(target);
     let inner = build_inner_resolved(&resolved, rest, with_nixgl);
 
@@ -381,7 +411,9 @@ fn build_inner_resolved(resolved: &str, rest: &[String], with_nixgl: bool) -> Ve
     if with_nixgl {
         match resolve_nixgl() {
             Some(nixgl) => inner.push(nixgl),
-            None => eprintln!("[vxr][AVISO] nixGLIntel no encontrado en PATH; se ejecuta sin aceleracion GPU."),
+            None => eprintln!(
+                "[vxr][AVISO] nixGLIntel no encontrado en PATH; se ejecuta sin aceleracion GPU."
+            ),
         }
     }
     inner.push(resolved.to_string());
@@ -395,7 +427,9 @@ fn run_with_entry(entry: &str, inner: &[String]) -> i32 {
     cmd.args(inner);
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
-    cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    cmd.stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
     match cmd.status() {
         Ok(s) => s.code().unwrap_or(1),
         Err(e) => {
@@ -407,7 +441,14 @@ fn run_with_entry(entry: &str, inner: &[String]) -> i32 {
 
 /// Ejecuta un AppImage con stdout/stderr en vivo (tee) pero inspeccionando la
 /// salida: si el runtime muere por FUSE, se reintenta por extraccion.
-fn run_appimage_piped(entry: &str, inner: &[String], fhs: &Path, target: &str, rest: &[String], force_rebuild: bool) -> i32 {
+fn run_appimage_piped(
+    entry: &str,
+    inner: &[String],
+    fhs: &Path,
+    target: &str,
+    rest: &[String],
+    force_rebuild: bool,
+) -> i32 {
     use std::io::{Read, Write};
     let mut child = match Command::new(entry)
         .args(inner)
@@ -484,9 +525,15 @@ fn run_appimage_piped(entry: &str, inner: &[String], fhs: &Path, target: &str, r
         return 0;
     }
     let low = combined.to_lowercase();
-    let fuse_fail = ["fuse", "cannot mount", "mount failed", "appimage-extract", "no such file or directory"]
-        .iter()
-        .any(|k| low.contains(k));
+    let fuse_fail = [
+        "fuse",
+        "cannot mount",
+        "mount failed",
+        "appimage-extract",
+        "no such file or directory",
+    ]
+    .iter()
+    .any(|k| low.contains(k));
     if fuse_fail {
         eprintln!("[vxr] el runtime AppImage fallo por FUSE/montaje (codigo {code}); reintentando por extraccion...");
         return extract_and_run_fhs(fhs, target, rest, force_rebuild);
@@ -532,10 +579,13 @@ pub fn main(args: &[String]) -> i32 {
     // extendido (necesitan las system-libs aunque el montaje FUSE funcione);
     // el resto usa el base minimo.
     let want_appimage_profile = is_appimage(&target);
-    let fhs_filename = if want_appimage_profile { "vx-fhs-appimage.nix" } else { "vx-fhs.nix" };
+    let fhs_filename = if want_appimage_profile {
+        "vx-fhs-appimage.nix"
+    } else {
+        "vx-fhs.nix"
+    };
 
-    let target_path_exists =
-        target.contains('/') && Path::new(&target).exists();
+    let target_path_exists = target.contains('/') && Path::new(&target).exists();
 
     // Caso AppImage con FUSE roto -> extraccion (tesis §3.2)
     if want_appimage_profile && !fuse_usable_in_namespace() {
@@ -567,7 +617,9 @@ pub fn main(args: &[String]) -> i32 {
             run_inside_fhs(&fhs, &target, &rest2, !no_gl, force_rebuild)
         }
         None => {
-            eprintln!("[vxr] no se encontro {fhs_filename} (buscado en ./, ~/.config/mwan/, /etc/mwan/).");
+            eprintln!(
+                "[vxr] no se encontro {fhs_filename} (buscado en ./, ~/.config/mwan/, /etc/mwan/)."
+            );
             eprintln!("[vxr] fallback: ejecucion directa sanitizada (puede fallar en musl si el binario es glibc)...");
             // Sin FHS no hay nixGL que desactivar: se retira --no-gl si venia primero.
             let rest: Vec<String> = if rest.first().map(|s| s.as_str()) == Some("--no-gl") {
@@ -579,7 +631,9 @@ pub fn main(args: &[String]) -> i32 {
             cmd.args(&rest);
             cmd.env_remove("LD_LIBRARY_PATH");
             cmd.env_remove("LD_PRELOAD");
-            cmd.stdin(Stdio::inherit()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
+            cmd.stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit());
             match cmd.status() {
                 Ok(s) => s.code().unwrap_or(1),
                 Err(e) => {

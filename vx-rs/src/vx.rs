@@ -38,10 +38,7 @@ pub fn aggressive_cleanup() {
         .args(["-sh", "/nix"])
         .output()
     {
-        println!(
-            "[vx] /nix: {}",
-            String::from_utf8_lossy(&du.stdout).trim()
-        );
+        println!("[vx] /nix: {}", String::from_utf8_lossy(&du.stdout).trim());
     }
 }
 
@@ -190,8 +187,13 @@ fn rewrite_desktop_entries() {
         }
     }
     if found > 0 {
-        println!("[vx] integrados {found} lanzadores en ~/.local/share/applications (Exec=vxr ...)");
-        let _ = util::run("update-desktop-database", &[&format!("{}/.local/share/applications", home)]);
+        println!(
+            "[vx] integrados {found} lanzadores en ~/.local/share/applications (Exec=vxr ...)"
+        );
+        let _ = util::run(
+            "update-desktop-database",
+            &[&format!("{}/.local/share/applications", home)],
+        );
     }
 }
 
@@ -230,7 +232,15 @@ fn cmd_doctor() -> i32 {
     let h = detect::detect();
     println!("vx doctor — host: {h:?}");
     let mut fail = 0;
-    for t in ["nix", "nix-store", "bwrap", "fusermount3", "curl", "xz", "git"] {
+    for t in [
+        "nix",
+        "nix-store",
+        "bwrap",
+        "fusermount3",
+        "curl",
+        "xz",
+        "git",
+    ] {
         let ok = std::process::Command::new("which")
             .arg(t)
             .output()
@@ -267,7 +277,10 @@ fn cmd_doctor() -> i32 {
         println!("  [AVISO] NVIDIA detectada: v1 usa Mesa Intel/AMD. Sigue igual pero sin aceleracion propietaria.");
     }
     if h.libc != "musl" {
-        println!("  [AVISO] libc={} (mwan optimizado para musl, funciona igual)", h.libc);
+        println!(
+            "  [AVISO] libc={} (mwan optimizado para musl, funciona igual)",
+            h.libc
+        );
     }
     if fail == 0 {
         println!("doctor: TODO OK");
@@ -320,7 +333,9 @@ pub fn main(args: &[String]) -> i32 {
                 code = util::run("nix", &["profile", "upgrade", "all"]);
             }
             if code != 0 {
-                eprintln!("[vx] nada que actualizar o perfil legacy (prueba `nix-channel --update`)");
+                eprintln!(
+                    "[vx] nada que actualizar o perfil legacy (prueba `nix-channel --update`)"
+                );
             }
             rewrite_desktop_entries();
             aggressive_cleanup();

@@ -109,8 +109,7 @@ pub fn detect() -> Host {
     if let Ok(entries) = fs::read_dir("/sys/bus/pci/devices") {
         for e in entries.flatten() {
             let base = e.path();
-            let vendor =
-                fs::read_to_string(base.join("vendor")).unwrap_or_default();
+            let vendor = fs::read_to_string(base.join("vendor")).unwrap_or_default();
             let class = fs::read_to_string(base.join("class")).unwrap_or_default();
             if class.trim_start().starts_with("0x03") {
                 match vendor.trim() {

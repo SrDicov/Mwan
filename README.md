@@ -65,6 +65,23 @@ Tras cada `vx install/remove/update`: `nix profile wipe-history` +
 Los `.desktop` de `~/.nix-profile/share/applications` se reescriben a
 `~/.local/share/applications` con `Exec=vxr ...` + marca `# X-Mwan-Managed`.
 
+## Detalles que dan guerra (ya resueltos)
+
+- **Paquetes unfree (steam):** `nix profile` (flakes) ignora tu
+  `~/.config/nixpkgs/config.nix` y evalua en modo puro. `vx` refleja tu
+  `allowUnfree` con `NIXPKGS_ALLOW_UNFREE=1` e invoca con `--impure`
+  (posicion: despues del subcomando). Sin esto, steam falla con
+  "unfree license" aunque ya lo tuvieras instalado.
+- **`vx update` es por elementos:** un flake local borrado (ej. `~/antigravity`)
+  ya no aborta todo; avisa y sigue. Codigo de salida 1 si hubo saltos.
+- **Wrappers con sandbox propio:** el `steam` de nixpkgs es un script bwrap;
+  `vxr` lo ejecuta en host + nixGL en vez de anidar FHS.
+- **AppImages:** perfil extendido automatico + fallback a extraccion con
+  `APPDIR` fijado si FUSE falla en el namespace.
+- **Seguridad en PCs justos:** candado `/tmp/mwan-nix.lock` serializa
+  install/update/gc/search/builds (dos evaluaciones gordas en 3.5GB
+  congelan el sistema; visto en la practica).
+
 ## Limites v1
 
 - Solo 64-bit (`multiPkgs=[]`), solo Mesa Intel/AMD (NVIDIA avisa y sigue con Intel).

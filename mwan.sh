@@ -369,7 +369,7 @@ do_update() {
     *) warn "update del sistema omitido (gestor desconocido)" ;;
   esac
   if have nix-channel; then nix-channel --update || warn "fallo channel update"; fi
-  if have nix; then nix profile upgrade '.*' 2>/dev/null || warn "nada que actualizar en nix profile (o usa flakes)"; fi
+  if have nix; then nix profile upgrade --all 2>/dev/null || warn "nada que actualizar en nix profile (o usa flakes)"; fi
   # Los canales cambiaron -> los FHS cacheados de vxr quedan obsoletos; se invalidan
   # (el proximo `vxr` reconstruye cada perfil una vez y vuelve a cachear).
   rm -f "$HOME/.cache/vx"/fhs-path* "${XDG_CACHE_HOME:-$HOME/.cache}"/vx/fhs-path* 2>/dev/null || true

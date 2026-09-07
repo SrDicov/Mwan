@@ -328,13 +328,12 @@ pub fn main(args: &[String]) -> i32 {
         "update" | "upgrade" => {
             let _lock = util::nix_lock();
             println!("[vx] actualizando perfil...");
-            let mut code = util::run("nix", &["profile", "upgrade", ".*"]);
-            if code != 0 {
-                code = util::run("nix", &["profile", "upgrade", "all"]);
-            }
+            // Sintaxis nix 2.4+: `upgrade --all`. ('.*' ya no casa con nada;
+            // 'all' a secas buscaria un paquete literalmente llamado asi.)
+            let code = util::run("nix", &["profile", "upgrade", "--all"]);
             if code != 0 {
                 eprintln!(
-                    "[vx] nada que actualizar o perfil legacy (prueba `nix-channel --update`)"
+                    "[vx] nada que actualizar o perfil legacy sin flakes (prueba `nix-channel --update`)"
                 );
             }
             rewrite_desktop_entries();

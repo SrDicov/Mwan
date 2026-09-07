@@ -369,6 +369,9 @@ do_update() {
     *) warn "update del sistema omitido (gestor desconocido)" ;;
   esac
   if have nix-channel; then nix-channel --update || warn "fallo channel update"; fi
+  if [ -z "${NIXPKGS_ALLOW_UNFREE:-}" ] && grep -q 'allowUnfree' "$HOME/.config/nixpkgs/config.nix" 2>/dev/null; then
+    export NIXPKGS_ALLOW_UNFREE=1
+  fi
   if have nix; then nix profile upgrade --all 2>/dev/null || warn "nada que actualizar en nix profile (o usa flakes)"; fi
   # Los canales cambiaron -> los FHS cacheados de vxr quedan obsoletos; se invalidan
   # (el proximo `vxr` reconstruye cada perfil una vez y vuelve a cachear).
@@ -433,6 +436,12 @@ cmd_install() {
   fi
   # Fallback sin vx: nix profile directo, bajo candado (vx se bloquea solo).
   mwan_lock
+  # `nix profile` (flakes) ignora ~/.config/nixpkgs/config.nix: reflejar el
+  # consentimiento unfree declarado por el usuario, nunca por defecto.
+  if [ -z "${NIXPKGS_ALLOW_UNFREE:-}" ] && grep -q 'allowUnfree' "$HOME/.config/nixpkgs/config.nix" 2>/dev/null; then
+    export NIXPKGS_ALLOW_UNFREE=1
+    log "NIXPKGS_ALLOW_UNFREE=1 (refleja tu ~/.config/nixpkgs/config.nix)"
+  fi
   for p in "$@"; do
     log "nix profile install nixpkgs#$p ..."
     # El listado normal trae colores ANSI; se usa --json para el chequeo.

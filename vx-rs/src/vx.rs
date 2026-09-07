@@ -47,6 +47,26 @@ fn nix_profile_args() -> Vec<String> {
     vec![]
 }
 
+/// Respeta el consentimiento unfree del usuario para los comandos `nix profile`
+/// (flakes), que ignoran `~/.config/nixpkgs/config.nix`. Sin esto, `vx install
+/// steam` / `vx update` fallan con "unfree license" aunque el usuario ya
+/// aceptara unfree (ej. este host tiene steam instalado y `allowUnfree=true`).
+/// Solo se activa si el usuario lo declaro (fichero o entorno); nunca por defecto.
+fn honor_allow_unfree() {
+    if std::env::var("NIXPKGS_ALLOW_UNFREE").is_ok() {
+        return;
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let cfg = std::path::Path::new(&home).join(".config/nixpkgs/config.nix");
+    let consent = std::fs::read_to_string(&cfg)
+        .map(|c| c.contains("allowUnfree"))
+        .unwrap_or(false);
+    if consent {
+        println!("[vx] NIXPKGS_ALLOW_UNFREE=1 (refleja tu ~/.config/nixpkgs/config.nix)");
+        std::env::set_var("NIXPKGS_ALLOW_UNFREE", "1");
+    }
+}
+
 /// Nombres de los elementos del perfil (via --json: el listado normal trae
 /// colores ANSI). Parser minimo sin dependencias: las claves que preceden a
 /// `":{"active":` son los nombres.
@@ -331,6 +351,7 @@ pub fn main(args: &[String]) -> i32 {
                 return 2;
             }
             let _lock = util::nix_lock();
+            honor_allow_unfree();
             let mut code = 0;
             for p in &args[1..] {
                 let c = install_one(p);
@@ -357,6 +378,7 @@ pub fn main(args: &[String]) -> i32 {
         }
         "update" | "upgrade" => {
             let _lock = util::nix_lock();
+            honor_allow_unfree();
             println!("[vx] actualizando perfil...");
             // Por elementos y no `--all`: un solo elemento roto (ej. un flake
             // local cuyo directorio se borro) abortaria todo el upgrade.

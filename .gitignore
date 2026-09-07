@@ -1,0 +1,21 @@
+# Build artifacts (se compilan en CI contra musl, no se versionan)
+vx-rs/target/
+# NOTA: vx-rs/Cargo.lock SI se versiona (crate binario = builds reproducibles)
+
+# Restos de pruebas AppImage (nunca commitear extracciones)
+squashfs-root/
+*.extracted/
+vx-cache/
+
+# Cachés locales de vxr (fhs-path-*) y temps de nix
+.cache/
+
+# Editores y sistema
+.vscode/
+.idea/
+*~
+*.swp
+.DS_Store
+
+# Logs de pruebas locales
+*.log

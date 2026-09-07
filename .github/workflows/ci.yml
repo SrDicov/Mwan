@@ -1,0 +1,132 @@
+# CI de Mwan: compila TODO contra musl en la nube (el PC queda libre).
+#  - rust-musl  : vx/vxr estatico x86_64-unknown-linux-musl + fmt + clippy
+#  - shell      : sintaxis POSIX (sh/dash/bash) + shellcheck de mwan.sh y tests
+#  - nix        : parse de los 3 perfiles FHS + build real de ambos closures
+#                 (solo construye; ejecutar el FHS exige user-namespaces y no
+#                 se hace aqui). No requiere hardware local.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-musl:
+    name: Rust estatico musl (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain + target musl
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+          components: rustfmt, clippy
+
+      - name: Linker musl (musl-tools)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+
+      - name: Formato
+        working-directory: vx-rs
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: vx-rs
+        run: cargo clippy --target x86_64-unknown-linux-musl --all-targets
+
+      - name: Build release estatico
+        working-directory: vx-rs
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Verificar estatico + smoke
+        run: |
+          BIN=vx-rs/target/x86_64-unknown-linux-musl/release/vx
+          ls -lh "$BIN"
+          file "$BIN" | tee /tmp/file.out
+          grep -q -E 'statically linked|static-pie linked' /tmp/file.out
+          "$BIN" version
+          "$BIN" --help | head -n 5
+          ln -sf vx vx-rs/target/x86_64-unknown-linux-musl/release/vxr
+          ./vx-rs/target/x86_64-unknown-linux-musl/release/vxr --help | head -n 3
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: vx-x86_64-unknown-linux-musl
+          path: vx-rs/target/x86_64-unknown-linux-musl/release/vx
+          if-no-files-found: error
+
+  shell:
+    name: POSIX sh + shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dash + shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dash shellcheck
+
+      - name: Sintaxis sh/dash/bash
+        run: |
+          sh -n mwan.sh
+          dash -n mwan.sh
+          bash -n mwan.sh
+          sh -n tests/doctor.sh
+          dash -n tests/doctor.sh
+
+      - name: Sin bashismos anti-Chimera
+        run: |
+          ! grep -n '<(' mwan.sh
+          ! grep -v '^[[:space:]]*#' mwan.sh | grep -q 'cp --preserve'
+
+      - name: ShellCheck
+        run: shellcheck -S warning mwan.sh tests/doctor.sh
+
+  nix:
+    name: Perfiles FHS (parse + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Canal nixpkgs-unstable (como mwan bootstrap)
+        run: |
+          nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
+          nix-channel --update
+
+      - name: Parse de los 3 perfiles
+        run: |
+          nix-instantiate --parse vx-fhs.nix > /dev/null
+          nix-instantiate --parse vx-fhs-common.nix > /dev/null
+          nix-instantiate --parse vx-fhs-appimage.nix > /dev/null
+
+      - name: Contenido obligatorio (tesis)
+        run: |
+          grep -q buildFHSEnv vx-fhs-common.nix
+          grep -q glibc.bin vx-fhs-common.nix
+          grep -q fuse3 vx-fhs-common.nix
+          grep -q LIBGL_DRIVERS_PATH vx-fhs-common.nix
+          grep -q gtk3 vx-fhs-appimage.nix
+          grep -q nss vx-fhs-appimage.nix
+
+      - name: Build perfil base
+        run: |
+          OUT=$(nix build -f vx-fhs.nix --no-link --print-out-paths | tail -n 1)
+          echo "BASE=$OUT"
+          test -x "$OUT/bin/vxr-fhs"
+          nix path-info --closure-size -h "$OUT" | tail -n 1
+
+      - name: Build perfil appimage
+        timeout-minutes: 30
+        run: |
+          OUT=$(nix build -f vx-fhs-appimage.nix --no-link --print-out-paths | tail -n 1)
+          echo "APPIMAGE=$OUT"
+          test -x "$OUT/bin/vxr-fhs"
+          nix path-info --closure-size -h "$OUT" | tail -n 1

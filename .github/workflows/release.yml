@@ -1,0 +1,47 @@
+# Release de Mwan: al pushear un tag v* se compila vx estatico-musl en la nube
+# y se adjunta al GitHub Release con checksums. Crear release: `git tag v0.1.0
+# && git push origin v0.1.0`.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  musl-release:
+    name: Binario estatico musl + Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain + target musl
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Linker musl
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl-tools
+
+      - name: Build release estatico
+        working-directory: vx-rs
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Empaquetar
+        run: |
+          BIN=vx-rs/target/x86_64-unknown-linux-musl/release/vx
+          file "$BIN"
+          cp "$BIN" ./vx-x86_64-unknown-linux-musl
+          ln -sf vx-x86_64-unknown-linux-musl ./vxr
+          sha256sum vx-x86_64-unknown-linux-musl > SHA256SUMS
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            vx-x86_64-unknown-linux-musl
+            SHA256SUMS
+          generate_release_notes: true

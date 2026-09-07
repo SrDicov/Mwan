@@ -349,7 +349,7 @@ do_clean() {
     nix-store --optimise 2>/dev/null || nix store optimise 2>/dev/null || warn "optimise no disponible"
   fi
   case "$PKGMGR" in
-    xbps) run_priv xbps-remove -Oo 2>/dev/null || true ;;
+    xbps) run_priv xbps-remove -yOo 2>/dev/null || true ;; # -y: sin pregunta (solo huerfanos)
     apk) run_priv apk cache clean 2>/dev/null || true ;;
     *) : ;;
   esac

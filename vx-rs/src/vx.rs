@@ -47,6 +47,36 @@ fn nix_profile_args() -> Vec<String> {
     vec![]
 }
 
+/// Nombres de los elementos del perfil (via --json: el listado normal trae
+/// colores ANSI). Parser minimo sin dependencias: las claves que preceden a
+/// `":{"active":` son los nombres.
+fn profile_element_names() -> Vec<String> {
+    let out = match std::process::Command::new("nix")
+        .args(["profile", "list", "--json"])
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return vec![],
+    };
+    let s = String::from_utf8_lossy(&out.stdout);
+    let mut names = Vec::new();
+    for chunk in s.split("\":{\"active\":") {
+        if let Some(pos) = chunk.rfind('"') {
+            let name = &chunk[pos + 1..];
+            if !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || "._+-".contains(c))
+            {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names
+}
+
 /// ¿esta `pkg` ya como elemento del perfil? (via --json: el listado normal
 /// trae escapes ANSI de color que rompen los grep anclados).
 fn profile_has(pkg: &str) -> bool {
@@ -328,13 +358,20 @@ pub fn main(args: &[String]) -> i32 {
         "update" | "upgrade" => {
             let _lock = util::nix_lock();
             println!("[vx] actualizando perfil...");
-            // Sintaxis nix 2.4+: `upgrade --all`. ('.*' ya no casa con nada;
-            // 'all' a secas buscaria un paquete literalmente llamado asi.)
-            let code = util::run("nix", &["profile", "upgrade", "--all"]);
-            if code != 0 {
-                eprintln!(
-                    "[vx] nada que actualizar o perfil legacy sin flakes (prueba `nix-channel --update`)"
-                );
+            // Por elementos y no `--all`: un solo elemento roto (ej. un flake
+            // local cuyo directorio se borro) abortaria todo el upgrade.
+            // Los de channels avisan "can't upgrade" y siguen (codigo 0).
+            let names = profile_element_names();
+            if names.is_empty() {
+                eprintln!("[vx] perfil vacio o nix legacy sin `profile` (prueba `nix-channel --update`)");
+            }
+            let mut code = 0;
+            for n in &names {
+                println!("[vx] actualizando {n}...");
+                if util::run("nix", &["profile", "upgrade", n]) != 0 {
+                    eprintln!("[vx][AVISO] no se pudo actualizar {n} (¿flake local borrado?); se sigue con el resto.");
+                    code = 1;
+                }
             }
             rewrite_desktop_entries();
             aggressive_cleanup();

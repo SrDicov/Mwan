@@ -363,7 +363,9 @@ pub fn main(args: &[String]) -> i32 {
             // Los de channels avisan "can't upgrade" y siguen (codigo 0).
             let names = profile_element_names();
             if names.is_empty() {
-                eprintln!("[vx] perfil vacio o nix legacy sin `profile` (prueba `nix-channel --update`)");
+                eprintln!(
+                    "[vx] perfil vacio o nix legacy sin `profile` (prueba `nix-channel --update`)"
+                );
             }
             let mut code = 0;
             for n in &names {

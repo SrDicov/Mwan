@@ -134,7 +134,7 @@ fn install_one(pkg: &str) -> i32 {
     let short = short.rsplit('.').next().unwrap_or(short);
     if profile_has(short) {
         println!("[vx] {short} ya esta en el perfil; actualizando...");
-        let code = util::run("nix", &["profile", "--impure", "upgrade", short]);
+        let code = util::run("nix", &["profile", "upgrade", "--impure", short]);
         rewrite_desktop_entries();
         aggressive_cleanup();
         return code;
@@ -142,8 +142,8 @@ fn install_one(pkg: &str) -> i32 {
     println!("[vx] instalando {spec} ...");
     let mut args = nix_profile_args();
     args.push("profile".into());
-    args.push("--impure".into());
     args.push("install".into());
+    args.push("--impure".into());
     args.push(spec.clone());
     let code = util::run_dyn("nix", &args);
     if code != 0 {
@@ -395,7 +395,7 @@ pub fn main(args: &[String]) -> i32 {
             let mut code = 0;
             for n in &names {
                 println!("[vx] actualizando {n}...");
-                if util::run("nix", &["profile", "--impure", "upgrade", n]) != 0 {
+                if util::run("nix", &["profile", "upgrade", "--impure", n]) != 0 {
                     eprintln!("[vx][AVISO] no se pudo actualizar {n} (¿flake local borrado?); se sigue con el resto.");
                     code = 1;
                 }

@@ -372,7 +372,7 @@ do_update() {
   if [ -z "${NIXPKGS_ALLOW_UNFREE:-}" ] && grep -q 'allowUnfree' "$HOME/.config/nixpkgs/config.nix" 2>/dev/null; then
     export NIXPKGS_ALLOW_UNFREE=1
   fi
-  if have nix; then nix profile --impure upgrade --all 2>/dev/null || warn "nada que actualizar en nix profile"; fi
+  if have nix; then nix profile upgrade --impure --all 2>/dev/null || warn "nada que actualizar en nix profile"; fi
   # Los canales cambiaron -> los FHS cacheados de vxr quedan obsoletos; se invalidan
   # (el proximo `vxr` reconstruye cada perfil una vez y vuelve a cachear).
   rm -f "$HOME/.cache/vx"/fhs-path* "${XDG_CACHE_HOME:-$HOME/.cache}"/vx/fhs-path* 2>/dev/null || true
@@ -447,9 +447,9 @@ cmd_install() {
     # El listado normal trae colores ANSI; se usa --json para el chequeo.
     if nix profile list --json 2>/dev/null | grep -F -q "\"$p\":"; then
       log "$p ya instalado; actualizando..."
-      nix profile --impure upgrade "$p" 2>/dev/null || nix profile --impure upgrade --all 2>/dev/null || true
+      nix profile upgrade --impure "$p" 2>/dev/null || nix profile upgrade --impure --all 2>/dev/null || true
     else
-      nix profile --impure install "nixpkgs#$p" || { mwan_unlock; die "fallo instalando $p"; }
+      nix profile install --impure "nixpkgs#$p" || { mwan_unlock; die "fallo instalando $p"; }
     fi
   done
   do_clean

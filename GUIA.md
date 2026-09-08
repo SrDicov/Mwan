@@ -107,6 +107,7 @@ Seguridad en PCs justos: `vx`, `vxr` y `mwan` comparten el candado
 | Síntoma | Causa y arreglo |
 |---|---|
 | `unfree license` con steam | Falta `{ allowUnfree = true; }` en `~/.config/nixpkgs/config.nix`. |
+| App .NET muere al instante (`Couldn't find a valid ICU package`) | Falta `icu` directo en el FHS (el rootfs solo enlaza deps directos para `dlopen` por nombre). Ya incluido desde v0.1.0+; `vxr --rebuild` si tu caché es vieja. |
 | `vx update` avisa de un flake y sigue | Directorio de un flake local borrado (ej. `~/antigravity`). Restaura el dir o `vx remove <nombre>`. Exit 1 = hubo saltos, el resto se actualizó. |
 | AppImage: `fusermount: Operation not permitted` | Kernel/namespace sin FUSE: `vxr` extrae y ejecuta solo automáticamente. |
 | AppImage Electron: `libnspr4.so` no existe | Se usa el perfil base por error (¿renombraste el `.AppImage` sin esa extensión?). Con extensión correcta usa el extendido. |

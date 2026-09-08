@@ -34,6 +34,11 @@ pkgs.buildFHSEnv {
     freetype
     fontconfig
     dejavu_fonts # unicas fuentes garantizadas (ver NOTA de binds arriba)
+    # icu DIRECTO (no transitivo): el rootfs solo enlaza en /usr/lib los
+    # deps directos, y .NET/Chromium hacen dlopen("libicuuc.so") por nombre.
+    # Sin esto: "Couldn't find a valid ICU package" y muerte en ~200ms.
+    # (Auditoria 2026-09-08: steam-run si lo enlaza via su multilib.)
+    icu
     bash
     coreutils
   ]) ++ extraPkgs;

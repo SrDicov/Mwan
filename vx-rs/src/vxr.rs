@@ -431,18 +431,13 @@ fn vulkan_icd() -> Option<String> {
 
 /// Aplica variables que solo tienen sentido con aceleración (nixGL delante).
 fn apply_gl_env(cmd: &mut Command, inner: &[String]) {
-    let uses_nixgl = inner
-        .first()
-        .map(|s| s.contains("nixGL"))
-        .unwrap_or(false);
+    let uses_nixgl = inner.first().map(|s| s.contains("nixGL")).unwrap_or(false);
     if uses_nixgl {
         if let Some(icd) = vulkan_icd() {
             cmd.env("VK_ICD_FILENAMES", &icd);
             cmd.env("VK_DRIVER_FILES", &icd);
         }
     }
-}
-    build_inner_resolved(&resolve_target(target), rest, with_nixgl)
 }
 
 /// Arma el argv interno del contenedor.

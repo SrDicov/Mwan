@@ -231,9 +231,10 @@ fn resolve_target(target: &str) -> String {
 }
 
 /// Cache del FHS construido: evita re-evaluar nixpkgs (~8s en N150) en cada
-/// invocacion. Clave = (tamano, mtime) de vx-fhs.nix; el path del store se
-/// valida con `nix-store --check-validity`. Se invalida al cambiar el .nix,
-/// con `vxr --rebuild` o con `mwan.sh update` (borra ~/.cache/vx/fhs-path).
+/// invocacion. Clave = huella del perfil + `vx-fhs-common.nix` hermano; el
+/// path del store se valida con `nix-store --check-validity`. Se invalida al
+/// cambiar cualquier .nix, con `vxr --rebuild` o con `mwan.sh update`
+/// (borra ~/.cache/vx/fhs-path-*).
 fn cache_path(fhs: &Path) -> Option<PathBuf> {
     let base = std::env::var("XDG_CACHE_HOME")
         .map(PathBuf::from)
@@ -249,23 +250,44 @@ fn cache_path(fhs: &Path) -> Option<PathBuf> {
     )
 }
 
+/// Huella para la cache: (tamano, mtime) del perfil Y de su hermano
+/// `vx-fhs-common.nix` (mismo dir), porque el perfil lo importa.
+/// (Bug 2026-09-08: solo se miraba el perfil y un cambio del comun
+/// reutilizaba un FHS obsoleto sin avisar.)
+fn cache_fingerprint(fhs: &Path) -> Option<String> {
+    fn stamp(p: &Path) -> Option<String> {
+        let meta = fs::metadata(p).ok()?;
+        let mtime = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        Some(format!("{}:{}", meta.len(), mtime))
+    }
+    let mut fp = stamp(fhs)?;
+    if let Some(dir) = fhs.parent() {
+        let common = dir.join("vx-fhs-common.nix");
+        if common.is_file() {
+            if let Some(s) = stamp(&common) {
+                fp.push('|');
+                fp.push_str(&s);
+            }
+        }
+    }
+    Some(fp)
+}
+
 fn cache_lookup(fhs: &Path, force_rebuild: bool) -> Option<String> {
     if force_rebuild {
         return None;
     }
-    let meta = fs::metadata(fhs).ok()?;
-    let len = meta.len();
-    let mtime = meta
-        .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs();
+    let fp = cache_fingerprint(fhs)?;
     let cache = cache_path(fhs)?;
     let content = fs::read_to_string(&cache).ok()?;
     let mut parts = content.split_whitespace();
-    if parts.next()? != len.to_string() || parts.next()? != mtime.to_string() {
-        return None; // el .nix cambio
+    if parts.next()? != fp {
+        return None; // el .nix o su comun cambiaron
     }
     let store = parts.next()?.to_string();
     let entry = format!("{store}/bin/vxr-fhs");
@@ -286,19 +308,13 @@ fn cache_lookup(fhs: &Path, force_rebuild: bool) -> Option<String> {
 }
 
 fn cache_store(fhs: &Path, store: &str) {
-    let meta = match fs::metadata(fhs) {
-        Ok(m) => m,
-        Err(_) => return,
+    let fp = match cache_fingerprint(fhs) {
+        Some(f) => f,
+        None => return,
     };
-    let mtime = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
     if let Some(cache) = cache_path(fhs) {
         let _ = fs::create_dir_all(cache.parent().unwrap());
-        let _ = fs::write(&cache, format!("{} {} {store}\n", meta.len(), mtime));
+        let _ = fs::write(&cache, format!("{fp} {store}\n"));
     }
 }
 

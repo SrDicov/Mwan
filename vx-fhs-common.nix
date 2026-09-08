@@ -44,6 +44,10 @@ pkgs.buildFHSEnv {
     # /dev/fuse para AppImage (tesis §3.2). try: no aborta en hosts sin fuse.
     "--dev-bind-try /dev/fuse /dev/fuse"
     "--bind-try /tmp/dumps /tmp/dumps"
+    # Fuentes del host (auditoria 2026-09-07: sin esto, fc-list=0 dentro y
+    # Chromium/Electron muestra tofu. Las de ~/.fonts llegan via $HOME).
+    "--ro-bind-try /usr/share/fonts /usr/share/fonts"
+    "--ro-bind-try /usr/share/fontconfig /usr/share/fontconfig"
     "--unshare-pid"
     "--die-with-parent"
     # NOTA: sin bind de /etc/resolv.conf — el buildFHSEnv moderno ya expone
@@ -71,11 +75,16 @@ pkgs.buildFHSEnv {
       export LOCALE_ARCHIVE="$HOME/.nix-profile/lib/locale/locale-archive"
     fi
 
-    # Rutas de drivers graficos (igual que steam FHS actual)
-    export LIBGL_DRIVERS_PATH="/run/opengl-driver/lib/dri"
-    export __EGL_VENDOR_LIBRARY_DIRS="/run/opengl-driver/share/glvnd/egl_vendor.d"
-    export LIBVA_DRIVERS_PATH="/run/opengl-driver/lib/dri"
-    export VDPAU_DRIVER_PATH="/run/opengl-driver/lib/vdpau"
+    # Rutas de drivers estilo NixOS: SOLO si existen (en NixOS las provee el
+    # sistema; fuera de NixOS ese dir no existe y exportarlas envenena a
+    # libGL/EGL/VA-API/VDPAU. nixGLIntel pone las buenas despues).
+    # (Auditoria 2026-09-07: exportarlas a ciegas rompia EGL fuera de NixOS.)
+    if [ -d /run/opengl-driver ]; then
+      export LIBGL_DRIVERS_PATH="/run/opengl-driver/lib/dri"
+      export __EGL_VENDOR_LIBRARY_DIRS="/run/opengl-driver/share/glvnd/egl_vendor.d"
+      export LIBVA_DRIVERS_PATH="/run/opengl-driver/lib/dri"
+      export VDPAU_DRIVER_PATH="/run/opengl-driver/lib/vdpau"
+    fi
 
     # TZ: Steam/pressure-vessel se confunde con symlinks de /etc/localtime
     if [ -z "''${TZ+x}" ]; then

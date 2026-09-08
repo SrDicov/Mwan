@@ -400,6 +400,51 @@ fn is_script_file(path: &str) -> bool {
     bytes.len() >= 2 && bytes[0] == b'#' && bytes[1] == b'!'
 }
 
+/// ICD de Vulkan derivado del script nixGLIntel (lee su MESA_64) + GPU host.
+/// nixGL (nixpkgs) no exporta VK_ICD_FILENAMES; sin ICD, Vulkan y ANGLE
+/// (Chromium/Electron, muchos juegos) fallan en silencio dentro del FHS.
+/// Devuelve None si no se puede determinar con seguridad (se sigue sin ICD,
+/// que es el comportamiento anterior).
+fn vulkan_icd() -> Option<String> {
+    let nixgl = resolve_nixgl()?;
+    let content = fs::read_to_string(&nixgl).ok()?;
+    let mesa = content.lines().find_map(|l| {
+        let t = l.trim().strip_prefix("export ").unwrap_or(l.trim());
+        t.strip_prefix("MESA_64=")
+            .map(|v| v.trim().trim_matches('"').to_string())
+    })?;
+    if !mesa.starts_with("/nix/store/") {
+        return None;
+    }
+    let file = match detect::detect().gpu.as_str() {
+        "intel" => "intel_icd.x86_64.json",
+        "amd" => "radeon_icd.x86_64.json",
+        _ => return None, // nvidia/unknown: no adivinar (v1 solo Mesa)
+    };
+    let icd = format!("{mesa}/share/vulkan/icd.d/{file}");
+    if Path::new(&icd).is_file() {
+        Some(icd)
+    } else {
+        None
+    }
+}
+
+/// Aplica variables que solo tienen sentido con aceleración (nixGL delante).
+fn apply_gl_env(cmd: &mut Command, inner: &[String]) {
+    let uses_nixgl = inner
+        .first()
+        .map(|s| s.contains("nixGL"))
+        .unwrap_or(false);
+    if uses_nixgl {
+        if let Some(icd) = vulkan_icd() {
+            cmd.env("VK_ICD_FILENAMES", &icd);
+            cmd.env("VK_DRIVER_FILES", &icd);
+        }
+    }
+}
+    build_inner_resolved(&resolve_target(target), rest, with_nixgl)
+}
+
 /// Arma el argv interno del contenedor.
 fn build_inner(target: &str, rest: &[String], with_nixgl: bool) -> Vec<String> {
     build_inner_resolved(&resolve_target(target), rest, with_nixgl)
@@ -427,6 +472,7 @@ fn run_with_entry(entry: &str, inner: &[String]) -> i32 {
     cmd.args(inner);
     cmd.env_remove("LD_LIBRARY_PATH");
     cmd.env_remove("LD_PRELOAD");
+    apply_gl_env(&mut cmd, inner);
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
@@ -450,10 +496,12 @@ fn run_appimage_piped(
     force_rebuild: bool,
 ) -> i32 {
     use std::io::{Read, Write};
-    let mut child = match Command::new(entry)
-        .args(inner)
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("LD_PRELOAD")
+    let mut cmd = Command::new(entry);
+    cmd.args(inner);
+    cmd.env_remove("LD_LIBRARY_PATH");
+    cmd.env_remove("LD_PRELOAD");
+    apply_gl_env(&mut cmd, inner);
+    let mut child = match cmd
         .stdin(Stdio::inherit())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

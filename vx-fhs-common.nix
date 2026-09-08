@@ -33,6 +33,7 @@ pkgs.buildFHSEnv {
     glib
     freetype
     fontconfig
+    dejavu_fonts # unicas fuentes garantizadas (ver NOTA de binds arriba)
     bash
     coreutils
   ]) ++ extraPkgs;
@@ -44,10 +45,11 @@ pkgs.buildFHSEnv {
     # /dev/fuse para AppImage (tesis §3.2). try: no aborta en hosts sin fuse.
     "--dev-bind-try /dev/fuse /dev/fuse"
     "--bind-try /tmp/dumps /tmp/dumps"
-    # Fuentes del host (auditoria 2026-09-07: sin esto, fc-list=0 dentro y
-    # Chromium/Electron muestra tofu. Las de ~/.fonts llegan via $HOME).
-    "--ro-bind-try /usr/share/fonts /usr/share/fonts"
-    "--ro-bind-try /usr/share/fontconfig /usr/share/fontconfig"
+    # NOTA (auditoria 2026-09-07): se intento --ro-bind de /usr/share/fonts
+    # del host, pero bwrap no puede crear el destino (/usr es read-only en el
+    # contenedor) y ABORTA el arranque. Las fuentes van en el closure
+    # (dejavu_fonts abajo); para NerdFonts del host, copiar a ~/.fonts
+    # (HOME si esta bindeado).
     "--unshare-pid"
     "--die-with-parent"
     # NOTA: sin bind de /etc/resolv.conf — el buildFHSEnv moderno ya expone
@@ -68,6 +70,12 @@ pkgs.buildFHSEnv {
     export FONTCONFIG_FILE=/etc/fonts/fonts.conf
     export XDG_DATA_DIRS="/usr/share:/usr/local/share:''${XDG_DATA_DIRS:-}"
     export SDL_JOYSTICK_DISABLE_UDEV=1
+
+    # Calienta la cache de fuentes del usuario (auditoria 2026-09-07: en frio,
+    # fc-list ve 1 fuente hasta que algo corre fc-cache; incremental = rapido).
+    if command -v fc-cache >/dev/null 2>&1; then
+      fc-cache >/dev/null 2>&1 || true
+    fi
 
     # Puente de locales glibc (el FHS trae glibcLocales propio de respaldo;
     # si el usuario tiene otro en su perfil se prefiere el suyo, como nixGL).

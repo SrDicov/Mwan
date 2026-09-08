@@ -39,6 +39,14 @@ pkgs.buildFHSEnv {
     # Sin esto: "Couldn't find a valid ICU package" y muerte en ~200ms.
     # (Auditoria 2026-09-08: steam-run si lo enlaza via su multilib.)
     icu
+
+    # Diagnostico DENTRO del FHS: `vxr glxinfo/vulkaninfo` no puede depender
+    # del host (los binarios musl de /usr/bin no corren aqui y el nombre
+    # simple no se resuelve). Sin esto, `vx doctor` exige mesa-demos en el
+    # host de cada distro Tier-1. (2026-09-08: la limpieza del perfil rompio
+    # `vxr glxinfo` porque venia de un elemento borrado.)
+    mesa-demos # glxinfo
+    vulkan-tools # vulkaninfo
     bash
     coreutils
   ]) ++ extraPkgs;

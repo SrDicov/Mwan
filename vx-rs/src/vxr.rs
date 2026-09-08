@@ -416,32 +416,56 @@ fn is_script_file(path: &str) -> bool {
     bytes.len() >= 2 && bytes[0] == b'#' && bytes[1] == b'!'
 }
 
-/// ICD de Vulkan derivado del script nixGLIntel (lee su MESA_64) + GPU host.
+/// ICD de Vulkan derivado del script nixGLIntel + GPU host.
 /// nixGL (nixpkgs) no exporta VK_ICD_FILENAMES; sin ICD, Vulkan y ANGLE
 /// (Chromium/Electron, muchos juegos) fallan en silencio dentro del FHS.
-/// Devuelve None si no se puede determinar con seguridad (se sigue sin ICD,
-/// que es el comportamiento anterior).
+/// Fuente: cada `<mesa>/lib/dri` de LIBGL_DRIVERS_PATH -> su
+/// `<mesa>/share/vulkan/icd.d/<gpu>.json` (fallback: MESA_64 de nixGL
+/// antiguos). Devuelve None si no se puede determinar con seguridad
+/// (se sigue sin ICD, que es el comportamiento anterior).
 fn vulkan_icd() -> Option<String> {
     let nixgl = resolve_nixgl()?;
     let content = fs::read_to_string(&nixgl).ok()?;
-    let mesa = content.lines().find_map(|l| {
-        let t = l.trim().strip_prefix("export ").unwrap_or(l.trim());
-        t.strip_prefix("MESA_64=")
-            .map(|v| v.trim().trim_matches('"').to_string())
-    })?;
-    if !mesa.starts_with("/nix/store/") {
-        return None;
-    }
     let file = match detect::detect().gpu.as_str() {
         "intel" => "intel_icd.x86_64.json",
         "amd" => "radeon_icd.x86_64.json",
         _ => return None, // nvidia/unknown: no adivinar (v1 solo Mesa)
     };
-    let icd = format!("{mesa}/share/vulkan/icd.d/{file}");
-    if Path::new(&icd).is_file() {
-        Some(icd)
-    } else {
+    let mut mesas: Vec<String> = content
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim().strip_prefix("export ").unwrap_or(l.trim());
+            let v = t.strip_prefix("LIBGL_DRIVERS_PATH=")?;
+            Some(v.trim().trim_matches('"').to_string())
+        })
+        .flat_map(|v| v.split(':').map(str::to_string).collect::<Vec<_>>())
+        .filter_map(|d| d.strip_suffix("/lib/dri").map(str::to_string))
+        .collect();
+    // Fallback nixGL antiguo con MESA_64=<mesa> (canal rodante: ya no existe,
+    // roto 2026-09-08 sin aviso).
+    if mesas.is_empty() {
+        if let Some(mesa) = content.lines().find_map(|l| {
+            let t = l.trim().strip_prefix("export ").unwrap_or(l.trim());
+            t.strip_prefix("MESA_64=")
+                .map(|v| v.trim().trim_matches('"').to_string())
+        }) {
+            mesas.push(mesa);
+        }
+    }
+    let mut icds = Vec::new();
+    for mesa in mesas {
+        if !mesa.starts_with("/nix/store/") {
+            continue;
+        }
+        let icd = format!("{mesa}/share/vulkan/icd.d/{file}");
+        if Path::new(&icd).is_file() && !icds.contains(&icd) {
+            icds.push(icd);
+        }
+    }
+    if icds.is_empty() {
         None
+    } else {
+        Some(icds.join(":"))
     }
 }
 
